@@ -1,4 +1,4 @@
-name: Build APK Expo
+name: Build APK Tanpa Google Service
 on: [push]
 
 jobs:
@@ -18,13 +18,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Expo CLI dan Dependencies
-        run: |
-          npm install -g expo-cli
-          npm install --legacy-peer-deps
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
 
-      - name: Generate Folder Android (Prebuild)
-        run: npx expo prebuild --platform android
+      - name: Hapus Referensi Google Services (Fix Error)
+        run: |
+          # Perintah ini akan menghapus baris googleServicesFile di app.config.ts agar tidak error
+          sed -i '/googleServicesFile/d' app.config.ts || true
+          sed -i '/googleServicesFile/d' app.json || true
+
+      - name: Generate Folder Android
+        run: npx expo prebuild --platform android --no-install
 
       - name: Build APK
         run: |
@@ -35,5 +39,5 @@ jobs:
       - name: Simpan Hasil APK
         uses: actions/upload-artifact@v4
         with:
-          name: HuaweiManager-Fixed
+          name: HuaweiManager-E5577-Fix
           path: android/app/build/outputs/apk/release/*.apk
