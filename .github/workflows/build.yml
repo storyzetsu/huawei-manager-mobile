@@ -1,0 +1,28 @@
+name: Build APK Otomatis
+on: [push]
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+      - name: Simpan APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hasil-Aplikasi-MiFi
+          path: android/app/build/outputs/apk/release/*.apk
