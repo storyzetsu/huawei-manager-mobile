@@ -1,11 +1,16 @@
-name: Build APK Fix Path
+name: Build APK Expo
 on: [push]
 
 jobs:
-  android-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -13,22 +18,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Build Android
+      - name: Install Expo CLI dan Dependencies
         run: |
-          cd app/android # INI PERUBAHANNYA: Masuk ke folder app dulu
+          npm install -g expo-cli
+          npm install --legacy-peer-deps
+
+      - name: Generate Folder Android (Prebuild)
+        run: npx expo prebuild --platform android
+
+      - name: Build APK
+        run: |
+          cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK
+      - name: Simpan Hasil APK
         uses: actions/upload-artifact@v4
         with:
-          name: HuaweiManager-Fixed-E5577
-          path: app/android/app/build/outputs/apk/release/*.apk # Jalur file APK juga disesuaikan
+          name: HuaweiManager-Fixed
+          path: android/app/build/outputs/apk/release/*.apk
