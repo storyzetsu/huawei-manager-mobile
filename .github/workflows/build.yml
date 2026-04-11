@@ -1,4 +1,4 @@
-name: Build APK Tanpa Google Service
+name: Build APK Final Fix
 on: [push]
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20 # Gunakan versi 20 agar kompatibel dengan reanimated
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -19,11 +19,12 @@ jobs:
           distribution: 'temurin'
 
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Hapus Referensi Google Services (Fix Error)
         run: |
-          # Perintah ini akan menghapus baris googleServicesFile di app.config.ts agar tidak error
+          npm install --legacy-peer-deps
+          npx expo install --fix
+
+      - name: Hapus Referensi Google Services
+        run: |
           sed -i '/googleServicesFile/d' app.config.ts || true
           sed -i '/googleServicesFile/d' app.json || true
 
