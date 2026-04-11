@@ -1,4 +1,4 @@
-name: Build APK Final Fix
+name: Build APK Final Fix Version
 on: [push]
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Gunakan versi 20 agar kompatibel dengan reanimated
+          node-version: 20
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -18,9 +18,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Fix Versions
         run: |
           npm install --legacy-peer-deps
+          # Memaksa install versi worklets yang diminta oleh Reanimated
+          npm install react-native-worklets@0.7.0 --save-exact --legacy-peer-deps
           npx expo install --fix
 
       - name: Hapus Referensi Google Services
