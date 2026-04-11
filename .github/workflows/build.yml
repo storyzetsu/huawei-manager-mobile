@@ -1,4 +1,4 @@
-name: Build APK Fix
+name: Build APK Fix Path
 on: [push]
 
 jobs:
@@ -21,14 +21,14 @@ jobs:
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Clean and Build
+      - name: Build Android
         run: |
-          cd android
+          cd app/android # INI PERUBAHANNYA: Masuk ke folder app dulu
           chmod +x gradlew
-          ./gradlew clean assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HuaweiManager-E5577-Fix
-          path: android/app/build/outputs/apk/release/*.apk
+          name: HuaweiManager-Fixed-E5577
+          path: app/android/app/build/outputs/apk/release/*.apk # Jalur file APK juga disesuaikan
