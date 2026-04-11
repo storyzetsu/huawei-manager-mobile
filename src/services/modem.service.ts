@@ -58,43 +58,64 @@ export class ModemService {
 
   async getSignalInfo(): Promise<SignalInfo> {
     try {
+      // 1. Ambil data dari endpoint sinyal utama
       const response = await this.apiClient.get('/api/device/signal');
-      
-      // FIX E5577 Max: Jika respon berupa plain text angka-angka (dipisah spasi)
-      if (typeof response === 'string' && !response.trim().startsWith('<?xml')) {
-        const parts = response.trim().split(/\s+/);
-        return {
-          pci: parts[0] || '',
-          cellId: parts[1] || '',
-          rsrq: parts[2] || '',
-          rsrp: parts[3] || '',
-          rssi: parts[4] || '',
-          sinr: parts[5] || '',
-          mode: parts[6] || '',
-          band: parts[7] ? `Band ${parts[7]}` : '', 
+      let signalData: SignalInfo;
+
+      // DETEKSI FORMAT: Cek apakah respon adalah teks spasi (khas Huawei E5577 Max)
+      if (typeof response === 'string' && response.trim().split(/\s+/).length > 5) {
+        const p = response.trim().split(/\s+/);
+        signalData = {
+          pci: p[0] || '',
+          cellId: p[1] || '',
+          rsrq: p[2] || '',
+          rsrp: p[3] || '',
+          rssi: p[4] || '',
+          sinr: p[5] || '',
+          mode: p[6] || '',
+          // Ambil angka terakhir sebagai Band
+          band: p[7] ? `Band ${p[7]}` : '',
           dlbandwidth: '', 
           ulbandwidth: '',
           rscp: '',
           ecio: '',
         };
+      } else {
+        // FORMAT XML STANDAR (Modem Huawei tipe lain)
+        const lteBandwidth = parseXMLValue(response, 'lte_bandwidth');
+        signalData = {
+          rssi: parseXMLValue(response, 'rssi'),
+          rsrp: parseXMLValue(response, 'rsrp'),
+          rsrq: parseXMLValue(response, 'rsrq'),
+          sinr: parseXMLValue(response, 'sinr'),
+          rscp: parseXMLValue(response, 'rscp'),
+          ecio: parseXMLValue(response, 'ecio'),
+          mode: parseXMLValue(response, 'mode'),
+          pci: parseXMLValue(response, 'pci'),
+          cellId: parseXMLValue(response, 'cell_id'),
+          band: parseXMLValue(response, 'band') || parseXMLValue(response, 'lte_bandinfo'),
+          dlbandwidth: parseXMLValue(response, 'dlbandwidth') || lteBandwidth,
+          ulbandwidth: parseXMLValue(response, 'ulbandwidth') || lteBandwidth,
+        };
       }
 
-      // Default XML Parser
-      const lteBandwidth = parseXMLValue(response, 'lte_bandwidth');
-      return {
-        rssi: parseXMLValue(response, 'rssi'),
-        rsrp: parseXMLValue(response, 'rsrp'),
-        rsrq: parseXMLValue(response, 'rsrq'),
-        sinr: parseXMLValue(response, 'sinr'),
-        rscp: parseXMLValue(response, 'rscp'),
-        ecio: parseXMLValue(response, 'ecio'),
-        mode: parseXMLValue(response, 'mode'),
-        pci: parseXMLValue(response, 'pci'),
-        cellId: parseXMLValue(response, 'cell_id'),
-        band: parseXMLValue(response, 'band') || parseXMLValue(response, 'lte_bandinfo'),
-        dlbandwidth: parseXMLValue(response, 'dlbandwidth') || lteBandwidth,
-        ulbandwidth: parseXMLValue(response, 'ulbandwidth') || lteBandwidth,
-      };
+      // 2. INVESTIGASI BANDWIDTH CADANGAN (Jika masih kosong)
+      // Terkadang E5577 menyimpan info bandwidth di /api/net/net-mode
+      if (!signalData.dlbandwidth || signalData.dlbandwidth === '') {
+        try {
+          const netModeResponse = await this.apiClient.get('/api/net/net-mode');
+          const bw = parseXMLValue(netModeResponse, 'LTEBandWidth') || 
+                     parseXMLValue(netModeResponse, 'bandwidth');
+          if (bw) {
+            signalData.dlbandwidth = `${bw} MHz`;
+            signalData.ulbandwidth = `${bw} MHz`;
+          }
+        } catch (e) {
+          // Abaikan jika endpoint net-mode tidak tersedia
+        }
+      }
+
+      return signalData;
     } catch (error) {
       console.error('Error getting signal info:', error);
       throw error;
@@ -102,45 +123,8 @@ export class ModemService {
   }
 
   async getSignalInfoFast(): Promise<SignalInfo> {
-    try {
-      const response = await this.apiClient.getFast('/api/device/signal');
-      
-      if (typeof response === 'string' && !response.trim().startsWith('<?xml')) {
-        const parts = response.trim().split(/\s+/);
-        return {
-          pci: parts[0] || '',
-          cellId: parts[1] || '',
-          rsrq: parts[2] || '',
-          rsrp: parts[3] || '',
-          rssi: parts[4] || '',
-          sinr: parts[5] || '',
-          mode: parts[6] || '',
-          band: parts[7] ? `Band ${parts[7]}` : '',
-          dlbandwidth: '',
-          ulbandwidth: '',
-          rscp: '',
-          ecio: '',
-        };
-      }
-
-      const lteBandwidth = parseXMLValue(response, 'lte_bandwidth');
-      return {
-        rssi: parseXMLValue(response, 'rssi'),
-        rsrp: parseXMLValue(response, 'rsrp'),
-        rsrq: parseXMLValue(response, 'rsrq'),
-        sinr: parseXMLValue(response, 'sinr'),
-        rscp: parseXMLValue(response, 'rscp'),
-        ecio: parseXMLValue(response, 'ecio'),
-        mode: parseXMLValue(response, 'mode'),
-        pci: parseXMLValue(response, 'pci'),
-        cellId: parseXMLValue(response, 'cell_id'),
-        band: parseXMLValue(response, 'band') || parseXMLValue(response, 'lte_bandinfo'),
-        dlbandwidth: parseXMLValue(response, 'dlbandwidth') || lteBandwidth,
-        ulbandwidth: parseXMLValue(response, 'ulbandwidth') || lteBandwidth,
-      };
-    } catch (error) {
-      throw error;
-    }
+    // Gunakan logika yang sama dengan getSignalInfo agar sinkron
+    return this.getSignalInfo();
   }
 
   async getNetworkInfo(): Promise<NetworkInfo> {
@@ -226,9 +210,7 @@ export class ModemService {
       const rebootData = `<?xml version="1.0" encoding="UTF-8"?><request><Control>1</Control></request>`;
       await this.apiClient.post('/api/device/control', rebootData);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async resetFactorySettings(): Promise<boolean> {
@@ -236,9 +218,7 @@ export class ModemService {
       const resetData = `<?xml version="1.0" encoding="UTF-8"?><request><Control>2</Control></request>`;
       await this.apiClient.post('/api/device/control', resetData);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getWanInfo(): Promise<WanInfo> {
@@ -251,18 +231,14 @@ export class ModemService {
         primaryDns: parseXMLValue(response, 'PrimaryDNS') || '',
         secondaryDns: parseXMLValue(response, 'SecondaryDNS') || '',
       };
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getMobileDataStatus(): Promise<MobileDataStatus> {
     try {
       const response = await this.apiClient.get('/api/dialup/mobile-dataswitch');
       return { dataswitch: parseXMLValue(response, 'dataswitch') === '1' };
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async toggleMobileData(enable: boolean): Promise<boolean> {
@@ -270,18 +246,14 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><dataswitch>${enable ? '1' : '0'}</dataswitch></request>`;
       await this.apiClient.post('/api/dialup/mobile-dataswitch', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async triggerPlmnScan(): Promise<boolean> {
     try {
       await this.apiClient.get('/api/net/plmn-list');
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getAntennaMode(): Promise<string> {
@@ -290,9 +262,7 @@ export class ModemService {
       const antennaValue = parseXMLValue(response, 'antennasettype') || parseXMLValue(response, 'AntennaSetType') || parseXMLValue(response, 'antenna_set_type');
       const modeMap: Record<string, string> = { '0': 'auto', '1': 'external', '2': 'internal' };
       return modeMap[antennaValue] || 'auto';
-    } catch (error) {
-      return 'auto';
-    }
+    } catch (error) { return 'auto'; }
   }
 
   async setAntennaMode(mode: 'auto' | 'internal' | 'external'): Promise<boolean> {
@@ -301,18 +271,14 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><antennasettype>${modeMap[mode]}</antennasettype></request>`;
       await this.apiClient.post('/api/device/antenna_set_type', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getNetworkMode(): Promise<string> {
     try {
       const response = await this.apiClient.get('/api/net/net-mode');
       return parseXMLValue(response, 'NetworkMode') || '00';
-    } catch (error) {
-      return '00';
-    }
+    } catch (error) { return '00'; }
   }
 
   async setNetworkMode(mode: string): Promise<boolean> {
@@ -320,9 +286,7 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><NetworkMode>${mode}</NetworkMode><NetworkBand>3FFFFFFF</NetworkBand><LTEBand>7FFFFFFFFFFFFFFF</LTEBand></request>`;
       await this.apiClient.post('/api/net/net-mode', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getBandSettings(): Promise<{ networkBand: string; lteBand: string }> {
@@ -332,9 +296,7 @@ export class ModemService {
         networkBand: parseXMLValue(response, 'NetworkBand') || '3FFFFFFF',
         lteBand: parseXMLValue(response, 'LTEBand') || '7FFFFFFFFFFFFFFF',
       };
-    } catch (error) {
-      return { networkBand: '3FFFFFFF', lteBand: '7FFFFFFFFFFFFFFF' };
-    }
+    } catch (error) { return { networkBand: '3FFFFFFF', lteBand: '7FFFFFFFFFFFFFFF' }; }
   }
 
   async setBandSettings(networkBand: string, lteBand: string): Promise<boolean> {
@@ -344,18 +306,14 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><NetworkMode>${currentMode}</NetworkMode><NetworkBand>${networkBand}</NetworkBand><LTEBand>${lteBand}</LTEBand></request>`;
       await this.apiClient.post('/api/net/net-mode', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getDataRoamingStatus(): Promise<boolean> {
     try {
       const response = await this.apiClient.get('/api/dialup/connection');
       return parseXMLValue(response, 'RoamAutoConnectEnable') === '1';
-    } catch (error) {
-      return false;
-    }
+    } catch (error) { return false; }
   }
 
   async setDataRoaming(enable: boolean): Promise<boolean> {
@@ -363,18 +321,14 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><RoamAutoConnectEnable>${enable ? '1' : '0'}</RoamAutoConnectEnable></request>`;
       await this.apiClient.post('/api/dialup/connection', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async getAutoNetworkStatus(): Promise<boolean> {
     try {
       const response = await this.apiClient.get('/api/dialup/apn-retry');
       return parseXMLValue(response, 'retrystatus') === '1';
-    } catch (error) {
-      return true;
-    }
+    } catch (error) { return true; }
   }
 
   async setAutoNetwork(enable: boolean): Promise<boolean> {
@@ -382,30 +336,22 @@ export class ModemService {
       const data = `<?xml version="1.0" encoding="UTF-8"?><request><retrystatus>${enable ? '1' : '0'}</retrystatus></request>`;
       await this.apiClient.post('/api/dialup/apn-retry', data);
       return true;
-    } catch (error) {
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
-  async getTimeSettings(): Promise<{ currentTime: string; sntpEnabled: boolean; ntpServer: string; ntpServerBackup: string; timezone: string; }> {
+  async getTimeSettings(): Promise<any> {
     return { currentTime: new Date().toISOString(), sntpEnabled: false, ntpServer: 'pool.ntp.org', ntpServerBackup: 'time.google.com', timezone: 'UTC+7' };
   }
 
-  async setTimeSettings(settings: any): Promise<boolean> {
-    return true;
-  }
+  async setTimeSettings(settings: any): Promise<boolean> { return true; }
 
-  async getCurrentTime(): Promise<string> {
-    return new Date().toISOString();
-  }
+  async getCurrentTime(): Promise<string> { return new Date().toISOString(); }
 
   async getMonthlyDataSettings(): Promise<any> {
     return { enabled: false, startDay: 1, dataLimit: 0, dataLimitUnit: 'GB', monthThreshold: 90, trafficMaxLimit: 0 };
   }
 
-  async setMonthlyDataSettings(settings: any): Promise<boolean> {
-    return true;
-  }
+  async setMonthlyDataSettings(settings: any): Promise<boolean> { return true; }
 
   async diagnosisPing(host: string = '1.1.1.1', timeout: number = 4000): Promise<any> {
     return { success: true, host, message: 'Ping successful' };
@@ -415,7 +361,5 @@ export class ModemService {
     return { internetConnection: true, dnsResolution: true, networkStatus: 'Connected', signalStrength: 'Good', summaryKey: 'allChecksPassed' };
   }
 
-  async clearTrafficHistory(): Promise<boolean> {
-    return true;
-  }
+  async clearTrafficHistory(): Promise<boolean> { return true; }
 }
